@@ -1,10 +1,11 @@
 package ru.netology;
 
 import java.util.*;
+import java.util.concurrent.*;
 
 public class Main {
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws Exception {
         String[] texts = new String[25];
         for (int i = 0; i < texts.length; i++) {
             texts[i] = generateText("aab", 30_000);
@@ -12,11 +13,15 @@ public class Main {
 
         long startTs = System.currentTimeMillis(); // start time
 
-        // Создаём список для хранения потоков
-        List<Thread> threads = new ArrayList<>();
+        // Узнаем количество ядер процессора для оптимальной работы в режиме многопоточности
+        int cores = Runtime.getRuntime().availableProcessors();
+        // Создадим пул потоков и список из FutureTask
+        ExecutorService threadPool = Executors.newFixedThreadPool(cores);
+        List<Future<Integer>> futureList = new ArrayList<>();
+
         for (String text : texts) {
-            // Перемещаем общую логику программы в лямбду интерфейса Runnable
-            Runnable logic = () -> {
+            // Перемещаем общую логику программы в лямбду интерфейса Callable
+            Callable<Integer> logic = () -> {
                 int maxSize = 0;
                 for (int i = 0; i < text.length(); i++) {
                     for (int j = 0; j < text.length(); j++) {
@@ -36,18 +41,25 @@ public class Main {
                     }
                 }
                 System.out.println(text.substring(0, 100) + " -> " + maxSize);
+                return maxSize;
             };
-            // Создаём новый поток для каждой строки, сохраняем его в список и стартуем
-            Thread thread = new Thread(logic);
-            threads.add(thread);
-            thread.start();
+            // Отправляем задачу на выполнение в пул потоков и добавляем её в общий список задач
+            Future<Integer> futureTask = threadPool.submit(logic);
+            futureList.add(futureTask);
         }
-        for (Thread thread : threads) {
-            thread.join(); // Зависаем, ждём когда поток, объект которого лежит в thread, завершится
-        }
-        long endTs = System.currentTimeMillis(); // end time
 
+        // Пробежимся по списку futureList и найдём максимальный интервал значений
+        int max = 0;
+        for (Future<Integer> i : futureList) {
+            max = Math.max(i.get(), max);
+        }
+        System.out.println("Максимальный интервал значений: " + max);
+
+        long endTs = System.currentTimeMillis(); // end time
         System.out.println("Time: " + (endTs - startTs) + "ms");
+        // Завершим работу пула потоков
+        threadPool.shutdown();
+
     }
 
     public static String generateText(String letters, int length) {
